@@ -10,6 +10,7 @@
 #include <config/BootConfig.h>
 #include <menus/Menus.h>
 #include <uefi/AcpiTimerLib.h>
+#include <gfx/gfx.h>
 
 // define all constructors
 extern EFI_STATUS EFIAPI UefiBootServicesTableLibConstructor(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE* SystemTable);
@@ -49,6 +50,7 @@ EFI_STATUS EFIAPI EfiMain(IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *System
     gDefaultEntry = GetBootEntryAt(config.DefaultOS);
 
     // we are ready to do shit :yay:
+    GFXInit();
     StartMenus();
 
 cleanup:

@@ -14,187 +14,131 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/DevicePathLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/CpuLib.h>
 #include <loaders/Loaders.h>
+#include <menus/Menus.h>
+#include <gfx/gfx.h>
+#include <config/BootEntries.h>
 
-// 14x13 (28x13)
-#define G EFI_GREEN
-#define W EFI_LIGHTGRAY
-#define R EFI_RED
-__attribute__((unused))
-static CHAR8 TomatoImage[] = {
-        0, 0, G, 0, 0, 0, 0, 0, 0, G, 0, 0, 0, 0,
-        0, 0, 0, G, G, 0, 0, G, G, 0, 0, 0, 0, 0,
-        G, G, 0, 0, G, G, G, G, G, G, G, G, 0, 0,
-        0, 0, G, G, G, G, G, G, G, G, R, R, G, 0,
-        0, 0, R, G, G, R, R, R, R, R, G, R, R, 0,
-        0, R, G, R, R, R, R, W, W, R, R, R, R, R,
-        0, R, R, R, R, R, R, W, W, W, R, R, R, R,
-        0, R, R, R, R, R, R, R, W, W, R, R, R, R,
-        0, R, R, R, R, R, R, R, R, R, R, R, R, R,
-        0, R, R, R, R, R, R, R, R, R, R, R, R, 0,
-        0, 0, R, R, R, R, R, R, R, R, R, R, 0, 0,
-        0, 0, 0, R, R, R, R, R, R, R, R, 0, 0, 0,
-        0, 0, 0, 0, R, R, R, R, R, R, 0, 0, 0, 0,
-};
-#undef G
-#undef W
-#undef R
+static UINT16 xmid, ymid;
+static UINT16 box_x1, box_y1, box_x2, box_y2;
 
-// (14x14) (28x14)
-#define G EFI_GREEN
-#define W EFI_WHITE
-#define r EFI_LIGHTRED
-#define R EFI_RED
-__attribute__((unused))
-static CHAR8 TomatoImage2[] = {
-        0, 0, 0, 0, 0, 0, 0, 0, G, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, G, 0, 0, 0, 0, 0,
-        0, 0, 0, G, 0, 0, 0, G, 0, 0, G, 0, 0,
-        0, 0, 0, 0, G, 0, G, 0, G, G, 0, 0, 0,
-        0, 0, 0, 0, r, G, G, G, R, r, 0, 0, 0,
-        0, 0, r, r, G, G, R, R, G, r, r, r, 0,
-        0, 0, r, G, r, r, r, r, r, W, W, r, 0,
-        0, R, r, r, r, r, r, r, r, r, W, r, r,
-        0, R, r, r, r, r, r, r, r, r, r, W, r,
-        0, R, r, r, r, r, r, r, r, r, r, r, r,
-        0, R, R, r, r, r, r, r, r, r, r, r, r,
-        0, 0, R, R, r, r, r, r, r, r, r, r, 0,
-        0, 0, R, R, R, R, R, r, r, r, r, r, 0,
-        0, 0, 0, 0, R, R, R, R, R, R, 0, 0, 0,
-};
-#undef G
-#undef W
-#undef R
-#undef r
+static const GFXColor_t COLOR_LIGHTRED = (GFXColor_t) { .red = 0x88, .green = 0x22, .blue = 0x22 };
+static const GFXColor_t COLOR_HIGHLIGHT = (GFXColor_t) { .red = 0x22, .green = 0x66, .blue = 0x22 };
 
-static void draw() {
-    ClearScreen(EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
+MENU EnterMainMenu(BOOLEAN first)
+{
+    xmid = GFXGetWidth() / 2;
+    ymid = GFXGetHeight() / 2;
 
-    WriteAt(0, 1, "TomatBoot v2");
-    WriteAt(0, 2, "Copyright (c) 2020 TomatOrg");
+    GFXSetBgColor(GFX_COLOR_LIGHTGRAY);
+    GFXSetFgColor(GFX_COLOR_BLACK);
+    GFXClear();
 
-    UINTN width = 0;
-    UINTN height = 0;
-    ASSERT_EFI_ERROR(gST->ConOut->QueryMode(gST->ConOut, gST->ConOut->Mode->Mode, &width, &height));
+    GFXSetFontSize(29);
+    GFXDrawString(xmid, 30, "KiwiBoot");
+    GFXSetFontSize(19);
+    GFXDrawString(xmid, 60, "Version 0.1a");
 
-    // read the config so I can display some stuff from it
-    BOOT_CONFIG config;
-    LoadBootConfig(&config);
+    UINTN numentries = 0;
+    for (LIST_ENTRY* link = gBootEntries.ForwardLink; link != &gBootEntries; link = link->ForwardLink, numentries++)
+        ;
 
-    // get GOP so we can query the resolutions
-    EFI_GRAPHICS_OUTPUT_PROTOCOL* gop = NULL;
-    ASSERT_EFI_ERROR(gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&gop));
-    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* info = NULL;
-    UINTN sizeOfInfo = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION);
-    ASSERT_EFI_ERROR(gop->QueryMode(gop, config.GfxMode, &sizeOfInfo, &info));
+    box_y1 = ymid - (numentries * 15);
+    box_y2 = ymid + (numentries * 15);
+    box_x1 = xmid - 200;
+    box_x2 = xmid + 200;
 
-    // display some nice info
-    EFI_TIME time;
-    ASSERT_EFI_ERROR(gRT->GetTime(&time, NULL));
-    WriteAt(0, 4, "Current time: %d/%d/%d %d:%d", time.Day, time.Month, time.Year, time.Hour, time.Minute);
-    WriteAt(0, 5, "Graphics mode: %dx%d", info->HorizontalResolution, info->VerticalResolution);
-    if (gDefaultEntry != NULL) {
-        WriteAt(0, 6, "Current OS: %s (%s)", gDefaultEntry->Name, gDefaultEntry->Path);
-    } else {
-        WriteAt(0, 6, "No config file found!");
-    }
-    WriteAt(0, 7, "UEFI Version: %d.%d", (gST->Hdr.Revision >> 16u) & 0xFFFFu, gST->Hdr.Revision & 0xFFFFu);
-
-    // options for what we can do
-    WriteAt(0, 13, "Press B for BOOTMENU");
-    WriteAt(0, 14, "Press S for SETUP");
-    WriteAt(0, 15, "Press TAB for SHUTDOWN");
-
-    // draw the logo
-    DrawImage(30 + ((width - 30) / 2) - 14, 1, TomatoImage2, 13, 14);
-}
-
-MENU EnterMainMenu(BOOLEAN first) {
-    draw();
-    ASSERT_EFI_ERROR(gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_RED, EFI_BLACK)));
-
-    // read the config
-    BOOT_CONFIG config;
-    LoadBootConfig(&config);
-
-    // create the timer event and counter
-    const UINTN TIMER_INTERVAL = 250000 /* 1/40 sec */;
-    const UINTN INITIAL_TIMEOUT_COUNTER = ((gBootConfigOverride.BootDelay >= 0 ? gBootConfigOverride.BootDelay : config.BootDelay) * 10000000) / TIMER_INTERVAL;
-    const UINTN BAR_WIDTH = 80;
-
-    INTN timeout_counter = INITIAL_TIMEOUT_COUNTER;
-    EFI_EVENT events[2] = { gST->ConIn->WaitForKey };
-    ASSERT_EFI_ERROR(gBS->CreateEvent(EVT_TIMER, TPL_CALLBACK, NULL, NULL, &events[1]));
-
-    if(first && !IsListEmpty(&gBootEntries)) {
-        ASSERT_EFI_ERROR(gBS->SetTimer(events[1], TimerRelative, TIMER_INTERVAL));
+    if (numentries == 0) {
+        GFXSetFgColor(COLOR_LIGHTRED);
+        GFXDrawRect(box_x1, ymid - 50, box_x2, ymid + 50);
+        GFXDrawString(xmid, ymid, "No Operating Systems Found!");
+        while (TRUE)
+            CpuPause();
     }
 
-    UINTN count = 2;
-    do {
-        // get key press
+    GFXSetFontSize(23);
+    GFXDrawString(xmid, box_y1 - 30, "Choose an Option");
+    GFXSetFontSize(17);
+
+    int selected = 0;
+    BOOT_ENTRY* selectedEntry = NULL;
+
+    while (TRUE) {
+        UINTN i = 0;
+        for (LIST_ENTRY* link = gBootEntries.ForwardLink; i < numentries; link = link->ForwardLink, i++) {
+            GFXSetFgColor(GFX_COLOR_GRAY);
+            GFXDrawRect(box_x1, box_y1 + (30 * i), box_x2, box_y1 + (30 * (i + 1)));
+            GFXSetFgColor(GFX_COLOR_BLACK);
+
+            BOOT_ENTRY* entry = BASE_CR(link, BOOT_ENTRY, Link);
+
+            if (i == selected) {
+                selectedEntry = entry;
+                GFXSetFgColor(COLOR_HIGHLIGHT);
+                GFXFillRect(box_x1 + 1, box_y1 + (30 * i) + 1, box_x2, box_y1 + (30 * (i + 1)));
+                GFXSetFgColor(GFX_COLOR_WHITE);
+            } else {
+                GFXSetFgColor(GFX_COLOR_LIGHTGRAY);
+                GFXFillRect(box_x1 + 1, box_y1 + (30 * i) + 1, box_x2, box_y1 + (30 * (i + 1)));
+                GFXSetFgColor(GFX_COLOR_BLACK);
+            }
+
+            // convert unicode string to ascii string for drawing
+            CHAR8* str = AllocatePool(StrLen(entry->Name) + 1);
+            UnicodeStrToAsciiStr(entry->Name, str);
+            GFXDrawString(xmid, box_y1 + (30 * i) + 15, str);
+        }
+        // draw the shutdown entry
+        GFXSetFgColor(GFX_COLOR_GRAY);
+        GFXDrawRect(box_x1, box_y1 + (30 * i) + 10, box_x2, box_y1 + (30 * (i + 1)) + 10);
+        GFXSetFgColor(GFX_COLOR_BLACK);
+
+        if (i == selected) {
+            GFXSetFgColor(COLOR_LIGHTRED);
+            GFXFillRect(box_x1 + 1, box_y1 + (30 * i) + 11, box_x2, box_y1 + (30 * (i + 1)) + 10);
+            GFXSetFgColor(GFX_COLOR_WHITE);
+        } else {
+            GFXSetFgColor(GFX_COLOR_LIGHTGRAY);
+            GFXFillRect(box_x1 + 1, box_y1 + (30 * i) + 11, box_x2, box_y1 + (30 * (i + 1)) + 10);
+            GFXSetFgColor(GFX_COLOR_BLACK);
+        }
+
+        GFXDrawString(xmid, box_y1 + (30 * i) + 25, "Shutdown");
+
         UINTN which = 0;
         EFI_INPUT_KEY key = {};
-        ASSERT_EFI_ERROR(gBS->WaitForEvent(count, events, &which));
-
-        // got a keypress
-        if(which == 0) {
-            // get key
-            EFI_STATUS status = gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
-            if(status == EFI_NOT_READY) {
-                continue;
-            }
-            ASSERT_EFI_ERROR(status);
-
-            // cancel timer and destroy it
-            if(count == 2) {
-                ASSERT_EFI_ERROR(gBS->SetTimer(events[1], TimerCancel, 0));
-                ASSERT_EFI_ERROR(gBS->CloseEvent(events[1]));
-                count = 1;
-
-                // clear the progress bar
-                ASSERT_EFI_ERROR(gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK)));
-                for (int i = 0; i < BAR_WIDTH; i++) {
-                    WriteAt(i, 22, " ");
-                }
-            }
-
-            // choose the menu or continue
-            if(key.UnicodeChar == L'b' || key.UnicodeChar == L'B') {
-                return MENU_BOOT_MENU;
-            } else if(key.UnicodeChar == L's' || key.UnicodeChar == L'S') {
-                return MENU_SETUP;
-            } else if(key.ScanCode == CHAR_TAB) {
-                return MENU_SHUTDOWN;
-            }
-
-            // got timeout
-        } else {
-            timeout_counter--;
-            if(timeout_counter <= 0) {
-                // set normal text color
-                ASSERT_EFI_ERROR(gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK)));
-
-                // close the event
-                ASSERT_EFI_ERROR(gBS->CloseEvent(events[1]));
-
-                // call the loader
-                LoadKernel(gBootConfigOverride.DefaultOS > 0 ? GetBootEntryAt(gBootConfigOverride.DefaultOS) : gDefaultEntry);
-            } else {
-                // set bar color
-                ASSERT_EFI_ERROR(gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY)));
-
-                // write new chunk of bar
-                int start = ((INITIAL_TIMEOUT_COUNTER - timeout_counter - 1) * BAR_WIDTH) / INITIAL_TIMEOUT_COUNTER;
-                int end = ((INITIAL_TIMEOUT_COUNTER - timeout_counter) * BAR_WIDTH) / INITIAL_TIMEOUT_COUNTER;
-                for(int i = start; i <= end; i++) {
-                    WriteAt(i, 22, " ");
-                }
-
-                // restart the timer
-                ASSERT_EFI_ERROR(gBS->SetTimer(events[1], TimerRelative, TIMER_INTERVAL));
-            }
-
+        ASSERT_EFI_ERROR(gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &which));
+        EFI_STATUS status = gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
+        if (status == EFI_NOT_READY) {
+            continue;
         }
-    } while(TRUE);
+        ASSERT_EFI_ERROR(status);
+
+        // decrease value
+        if (key.ScanCode == SCAN_DOWN) {
+            selected++;
+            if (selected > i) {
+                selected = 0;
+            }
+
+            // prev potion
+        } else if (key.ScanCode == SCAN_UP) {
+            selected--;
+            if (selected < 0) {
+                selected = i;
+            }
+
+            // save and exit
+        } else if (key.UnicodeChar == CHAR_CARRIAGE_RETURN) {
+            // shutdown
+            if(i==selected)
+                return MENU_SHUTDOWN;
+                
+            // choose an os to starts
+            LoadKernel(selectedEntry);
+            while (1)
+                CpuSleep();
+        }
+    }
 }
